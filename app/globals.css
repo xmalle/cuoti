@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --paper: #EFEEE7;
+  --card: #FBFAF6;
+  --ink: #2B2A28;
+  --ink-soft: #5C5A55;
+  --ink-muted: #8A8780;
+  --line: #E2E0D8;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  /* 手机优先：限制最大宽度居中 */
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+  box-shadow: 0 0 24px rgba(43, 42, 40, 0.04);
+}
+
+/* 隐藏滚动条但保留滚动功能 */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 横向滚动 chip 栏 */
+.scroll-snap-x {
+  scroll-snap-type: x mandatory;
+}
+.scroll-snap-x > * {
+  scroll-snap-align: start;
+}
+
+/* 图片轮播 scroll-snap */
+.carousel-snap {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.carousel-snap > * {
+  scroll-snap-align: center;
+  flex-shrink: 0;
+}
+
+/* 最小点击区域 */
+.tap-area {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* 输入框聚焦样式 */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+}
+
+/* 隐藏 file input */
+input[type='file'] {
+  display: none;
+}
+
+/* 骨架屏动画 */
+.skeleton {
+  background: linear-gradient(90deg, #E2E0D8 25%, #EDEBE3 50%, #E2E0D8 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* PDF 渲染容器（隐藏但保留尺寸） */
+.pdf-render-container {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 794px; /* A4 宽度 @96dpi */
+  background: white;
+  padding: 32px;
+}
