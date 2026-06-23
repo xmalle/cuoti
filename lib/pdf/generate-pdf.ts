@@ -9,6 +9,9 @@ interface ExportOptions {
   onStatus?: (msg: string) => void;
 }
 
+// 中文字体栈（覆盖主流平台）
+const FONT_STACK = 'system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif';
+
 // 将图片 URL 转为 base64 data URL（解决 iOS Safari 跨域问题）
 async function imageUrlToBase64(url: string): Promise<string> {
   try {
@@ -21,7 +24,6 @@ async function imageUrlToBase64(url: string): Promise<string> {
       reader.readAsDataURL(blob);
     });
   } catch {
-    // fetch 失败则直接返回原始 URL，让 jsPDF 尝试加载
     return url;
   }
 }
@@ -37,7 +39,82 @@ async function loadImage(src: string): Promise<{ img: HTMLImageElement; w: numbe
   });
 }
 
-// 生成 PDF（iOS Safari 兼容方案：fetch base64 + jsPDF addImage）
+// 将文本渲染到 Canvas 并返回逐行 data URL（解决 jsPDF 中文乱码）
+function renderTextLines(
+  text: string,
+  fontSizePt: number,
+  color: [number, number, number],
+  maxWidthMm: number,
+  fontWeight: 'normal' | 'bold' = 'normal'
+): { dataUrl: string; heightMm: number }[] {
+  const SCALE = 3; // 渲染倍率，提高清晰度
+  const PX_PER_MM = 96 / 25.4;
+  const PT_TO_MM = 25.4 / 72;
+
+  const fontSizeMm = fontSizePt * PT_TO_MM;
+  const pxFont = fontSizeMm * PX_PER_MM * SCALE;
+  const pxMaxWidth = Math.ceil(maxWidthMm * PX_PER_MM * SCALE);
+
+  // 测量文本换行
+  const mCanvas = document.createElement('canvas');
+  const mCtx = mCanvas.getContext('2d')!;
+  mCtx.font = `${fontWeight} ${pxFont}px ${FONT_STACK}`;
+
+  const lines: string[] = [];
+  let cur = '';
+  for (const ch of text) {
+    const test = cur + ch;
+    if (mCtx.measureText(test).width > pxMaxWidth && cur) {
+      lines.push(cur);
+      cur = ch;
+    } else {
+      cur = test;
+    }
+  }
+  if (cur) lines.push(cur);
+  if (!lines.length) return [];
+
+  const lineHPx = pxFont * 1.5;
+  const lineHMm = lineHPx / (SCALE * PX_PER_MM);
+
+  // 逐行渲染到 Canvas
+  return lines.map((line) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = pxMaxWidth;
+    canvas.height = Math.ceil(lineHPx);
+    const ctx = canvas.getContext('2d')!;
+    ctx.font = `${fontWeight} ${pxFont}px ${FONT_STACK}`;
+    ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+    ctx.textBaseline = 'top';
+    ctx.fillText(line, 0, lineHPx * 0.15);
+    return {
+      dataUrl: canvas.toDataURL('image/png'),
+      heightMm: lineHMm,
+    };
+  });
+}
+
+// 将单行文本渲染为图片添加到 PDF，返回占用高度
+function addTextImage(
+  pdf: jsPDF,
+  text: string,
+  x: number,
+  y: number,
+  fontSizePt: number,
+  color: [number, number, number],
+  maxWidthMm: number,
+  fontWeight: 'normal' | 'bold' = 'normal'
+): number {
+  const rendered = renderTextLines(text, fontSizePt, color, maxWidthMm, fontWeight);
+  if (rendered.length === 0) return 0;
+  const { dataUrl, heightMm } = rendered[0];
+  if (dataUrl) {
+    pdf.addImage(dataUrl, 'PNG', x, y, maxWidthMm, heightMm);
+  }
+  return heightMm;
+}
+
+// 生成 PDF（中文 Canvas 渲染 + 图片 addImage 方案）
 export async function generatePdf(questions: Question[], options: ExportOptions): Promise<void> {
   const { groupByChapter, includeAnalysis, onProgress, onStatus } = options;
 
@@ -48,7 +125,6 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
   const marginTop = 14;
   const marginBottom = 14;
   const contentWidth = pageWidth - marginX * 2;
-  const maxContentHeight = pageHeight - marginTop - marginBottom;
   let yPos = marginTop;
   let questionIndex = 0;
 
@@ -65,17 +141,17 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
         pdf.addPage();
         yPos = marginTop;
       }
+      // 背景色块
       pdf.setFillColor(0xf5, 0xf4, 0xee);
       pdf.rect(marginX, yPos, contentWidth, titleHeight, 'F');
+      // 左侧色条
       pdf.setDrawColor(0xb8, 0x47, 0x2f);
       pdf.setLineWidth(0.8);
       pdf.line(marginX, yPos, marginX, yPos + titleHeight);
-      pdf.setFontSize(14);
-      pdf.setTextColor(0x2b, 0x2a, 0x28);
-      pdf.text(group.name, marginX + 5, yPos + 8);
-      pdf.setFontSize(9);
-      pdf.setTextColor(0x8a, 0x87, 0x80);
-      pdf.text(`${group.items.length} 题`, marginX + 5, yPos + 14);
+      // 章节名（Canvas 渲染中文）
+      addTextImage(pdf, group.name, marginX + 5, yPos + 2, 14, [0x2b, 0x2a, 0x28], contentWidth - 5, 'bold');
+      // 题数
+      addTextImage(pdf, `${group.items.length} 题`, marginX + 5, yPos + 11, 9, [0x8a, 0x87, 0x80], contentWidth - 5);
       yPos += titleHeight + 4;
     }
 
@@ -90,16 +166,14 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
         pdf.addPage();
         yPos = marginTop;
       }
-      pdf.setFontSize(11);
-      pdf.setTextColor(0x2b, 0x2a, 0x28);
-      pdf.text(titleText, marginX, yPos + 4);
-      yPos += 8;
+      const titleH = addTextImage(pdf, titleText, marginX, yPos, 11, [0x2b, 0x2a, 0x28], contentWidth, 'bold');
+      yPos += Math.max(titleH, 5) + 3;
 
       // 题目图片
       const questionImages = q.images?.filter((i) => i.type === 'question') || [];
       for (const imgData of questionImages) {
         const url = getPublicImageUrl(imgData.storage_path);
-        yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, maxContentHeight, marginTop, marginBottom);
+        yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
       }
 
       // 错因标签
@@ -108,10 +182,8 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
           pdf.addPage();
           yPos = marginTop;
         }
-        pdf.setFontSize(8);
-        pdf.setTextColor(0x5c, 0x5a, 0x55);
-        pdf.text(q.error_tags.join('  '), marginX, yPos + 3);
-        yPos += 6;
+        const tagH = addTextImage(pdf, q.error_tags.join('  '), marginX, yPos, 8, [0x5c, 0x5a, 0x55], contentWidth);
+        yPos += Math.max(tagH, 4) + 2;
       }
 
       // 解析
@@ -122,32 +194,25 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
             pdf.addPage();
             yPos = marginTop;
           }
-          pdf.setFontSize(9);
-          pdf.setTextColor(0x8a, 0x87, 0x80);
-          pdf.text('解析：', marginX, yPos + 3);
-          yPos += 6;
+          const labelH = addTextImage(pdf, '解析：', marginX, yPos, 9, [0x8a, 0x87, 0x80], contentWidth);
+          yPos += Math.max(labelH, 4) + 2;
 
           for (const imgData of analysisImages) {
             const url = getPublicImageUrl(imgData.storage_path);
-            yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, maxContentHeight, marginTop, marginBottom);
+            yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
           }
 
           if (q.analysis_supplement) {
-            if (yPos + 10 > pageHeight - marginBottom) {
-              pdf.addPage();
-              yPos = marginTop;
-            }
-            pdf.setFontSize(9);
-            pdf.setTextColor(0x5c, 0x5a, 0x55);
-            const lines = pdf.splitTextToSize(q.analysis_supplement, contentWidth);
-            for (const line of lines) {
-              if (yPos + 4 > pageHeight - marginBottom) {
+            const textLines = renderTextLines(q.analysis_supplement, 9, [0x5c, 0x5a, 0x55], contentWidth);
+            for (const line of textLines) {
+              if (yPos + line.heightMm > pageHeight - marginBottom) {
                 pdf.addPage();
                 yPos = marginTop;
               }
-              pdf.text(line, marginX, yPos + 3);
-              yPos += 4;
+              pdf.addImage(line.dataUrl, 'PNG', marginX, yPos, contentWidth, line.heightMm);
+              yPos += line.heightMm;
             }
+            yPos += 2;
           }
         }
       }
@@ -181,7 +246,7 @@ async function addImageToPdf(
   x: number,
   yPos: number,
   contentWidth: number,
-  maxContentHeight: number,
+  pageHeight: number,
   marginTop: number,
   marginBottom: number
 ): Promise<number> {
@@ -192,7 +257,6 @@ async function addImageToPdf(
   const ratio = h / w;
   const imgWidth = contentWidth;
   const imgHeight = imgWidth * ratio;
-  const pageHeight = maxContentHeight + marginTop + marginBottom;
 
   // 如果图片高度超过一页，按页拆分
   let remainingHeight = imgHeight;
@@ -203,7 +267,6 @@ async function addImageToPdf(
     const drawHeight = Math.min(remainingHeight, availableHeight);
 
     if (drawHeight < 5) {
-      // 空间太小，换新页
       pdf.addPage();
       yPos = marginTop;
       continue;
