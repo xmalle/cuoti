@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Star, CheckCircle2 } from 'lucide-react';
 import type { Question } from '@/types';
 import { getPublicImageUrl } from '@/lib/supabase/client';
-import { formatRelativeTime } from '@/lib/utils/format';
+import { formatRelativeTime, isEbbinghausDue } from '@/lib/utils/format';
 import { cn } from '@/lib/utils/cn';
 
 export function QuestionCard({ question }: { question: Question }) {
@@ -15,11 +15,22 @@ export function QuestionCard({ question }: { question: Question }) {
   const kp = question.knowledge_point;
   const mastered = question.review_status === 'mastered';
 
+  // 艾宾浩斯复习提醒：待复习且超过 1/3/7/14/30 天显示红点
+  const shouldReview =
+    !mastered && isEbbinghausDue(question.created_at);
+
   return (
     <Link
       href={`/question/${question.id}`}
-      className="block bg-card rounded-card shadow-card p-3 flex gap-3 active:scale-[0.99] transition-transform"
+      className="block bg-card rounded-card shadow-card p-3 flex gap-3 active:scale-[0.99] transition-transform relative"
     >
+      {/* 艾宾浩斯复习提醒红点 */}
+      {shouldReview && (
+        <span
+          className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full"
+          style={{ backgroundColor: '#B8472F' }}
+        />
+      )}
       <div className="w-20 h-20 rounded-lg bg-paper flex-shrink-0 overflow-hidden flex items-center justify-center">
         {thumbUrl ? (
           // eslint-disable-next-line @next/next/no-img-element

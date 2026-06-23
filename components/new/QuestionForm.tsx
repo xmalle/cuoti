@@ -234,7 +234,10 @@ export function QuestionForm({ editingQuestion, onSaved }: Props) {
         />
       </section>
 
-      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-card/95 backdrop-blur-sm border-t border-line p-3 z-40">
+      <div
+        className="fixed bottom-0 left-0 right-0 bg-[#EFEEE7] border-t border-[#DEDACD] px-4 pt-3 z-50"
+        style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }}
+      >
         {saving && progress > 0 && (
           <div className="mb-2">
             <div className="flex justify-between text-[10px] text-ink-soft mb-1">

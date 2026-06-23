@@ -32,6 +32,7 @@ export default function ExportPage() {
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [statusText, setStatusText] = useState('');
 
   const handlePreview = useCallback(async () => {
     setPreviewing(true);
@@ -57,12 +58,14 @@ export default function ExportPage() {
       await generatePdf(questions, {
         groupByChapter: filters.group_by_chapter,
         includeAnalysis: filters.include_analysis,
+        onStatus: (msg) => setStatusText(msg),
       });
       toast.success('PDF 已生成并下载');
     } catch (e: any) {
       toast.error(e.message || '生成失败');
     } finally {
       setGenerating(false);
+      setStatusText('');
     }
   }, [filters]);
 
@@ -98,7 +101,7 @@ export default function ExportPage() {
         {generating ? (
           <>
             <Loader2 size={20} className="animate-spin" />
-            生成中...
+            {statusText || '生成中...'}
           </>
         ) : (
           <>

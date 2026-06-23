@@ -30,6 +30,12 @@ export async function listQuestions(
   if (filters.difficulty) query = query.eq('difficulty', filters.difficulty);
   if (filters.review_status) query = query.eq('review_status', filters.review_status);
   if (filters.error_tag) query = query.contains('error_tags', [filters.error_tag]);
+  if (filters.search) {
+    const pattern = `%${filters.search}%`;
+    query = query.or(
+      `source.ilike.${pattern},error_description.ilike.${pattern},analysis_supplement.ilike.${pattern}`
+    );
+  }
 
   query = query.order('created_at', { ascending: false }).limit(PAGE_SIZE);
 
@@ -132,6 +138,44 @@ export async function getQuestionStats(): Promise<{ total: number; pending: numb
     .eq('review_status', 'pending');
   if (e2) throw e2;
   return { total: total || 0, pending: pending || 0 };
+}
+
+// 一键清空所有错题及图片
+export async function clearAllData(): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+
+  // 1. 列出 Storage 中所有文件并删除
+  const { data: folders } = await supabase.storage.from('question-images').list();
+  if (folders && folders.length > 0) {
+    for (const folder of folders) {
+      const { data: files } = await supabase.storage.from('question-images').list(folder.name);
+      if (files && files.length > 0) {
+        const paths = files.map((f) => `${folder.name}/${f.name}`);
+        await supabase.storage.from('question-images').remove(paths);
+      }
+    }
+    // 删除空文件夹下的子目录
+    for (const folder of folders) {
+      const { data: subFolders } = await supabase.storage.from('question-images').list(folder.name);
+      if (subFolders && subFolders.length > 0) {
+        for (const sub of subFolders) {
+          const { data: subFiles } = await supabase.storage.from('question-images').list(`${folder.name}/${sub.name}`);
+          if (subFiles && subFiles.length > 0) {
+            const subPaths = subFiles.map((f) => `${folder.name}/${sub.name}/${f.name}`);
+            await supabase.storage.from('question-images').remove(subPaths);
+          }
+        }
+      }
+    }
+  }
+
+  // 2. 清空 question_images 表
+  const { error: imgError } = await supabase.from('question_images').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  if (imgError) throw imgError;
+
+  // 3. 清空 questions 表
+  const { error: qError } = await supabase.from('questions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  if (qError) throw qError;
 }
 
 // PDF 导出查询（不分页）

@@ -104,3 +104,8 @@ input[type='file'] {
   background: white;
   padding: 32px;
 }
+
+/* iOS 安全区域适配 */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

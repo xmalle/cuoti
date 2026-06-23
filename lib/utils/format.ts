@@ -42,6 +42,17 @@ export function truncate(text: string, maxLen: number): string {
   return text.slice(0, maxLen) + '...';
 }
 
+// 艾宾浩斯遗忘曲线间隔（天）
+const EBBINGHAUS_INTERVALS = [1, 3, 7, 14, 30];
+
+// 判断是否到达艾宾浩斯复习节点（距录入时间超过 1/3/7/14/30 天）
+export function isEbbinghausDue(createdAt: string): boolean {
+  const now = Date.now();
+  const created = new Date(createdAt).getTime();
+  const diffDays = (now - created) / (24 * 60 * 60 * 1000);
+  return EBBINGHAUS_INTERVALS.some((interval) => diffDays >= interval && diffDays < interval + 1);
+}
+
 // 生成时间戳文件名
 export function timestampName(): string {
   return String(Date.now());

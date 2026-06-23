@@ -4,6 +4,7 @@ import { SubjectManager } from '@/components/settings/SubjectManager';
 import { ChapterManager } from '@/components/settings/ChapterManager';
 import { KnowledgePointManager } from '@/components/settings/KnowledgePointManager';
 import { DataStats } from '@/components/settings/DataStats';
+import { ClearAllData } from '@/components/settings/ClearAllData';
 
 export default function SettingsPage() {
   return (
@@ -18,6 +19,8 @@ export default function SettingsPage() {
         <KnowledgePointManager />
         <div className="h-px bg-line" />
         <DataStats />
+        <div className="h-px bg-line" />
+        <ClearAllData />
       </div>
     </div>
   );

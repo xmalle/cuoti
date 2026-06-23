@@ -81,6 +81,7 @@ export interface FilterState {
   difficulty?: number;
   review_status?: ReviewStatus;
   error_tag?: string;
+  search?: string;
 }
 
 // 新增/编辑错题表单数据

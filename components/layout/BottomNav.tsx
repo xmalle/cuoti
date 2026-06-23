@@ -15,11 +15,11 @@ const tabs = [
 export function BottomNav() {
   const pathname = usePathname();
 
-  // 详情页不显示底部导航
-  if (pathname?.startsWith('/question/')) return null;
+  // 详情页和新增页不显示底部导航
+  if (pathname?.startsWith('/question/') || pathname === '/new') return null;
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-card/95 backdrop-blur-sm border-t border-line shadow-nav z-50">
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] bg-card/95 backdrop-blur-sm border-t border-line shadow-nav z-[60] safe-bottom">
       <div className="flex items-stretch">
         {tabs.map((tab) => {
           const active = pathname === tab.href;

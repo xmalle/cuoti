@@ -69,15 +69,28 @@ export function FilterChips({ filters, onChange, subjects, chapters }: FilterChi
     onChange(next);
   };
 
+  const selectAndClose = (key: ChipKey, newFilters: FilterState) => {
+    onChange(newFilters);
+    setOpenKey(null);
+  };
+
   return (
-    <div className="relative">
-      <div className="flex gap-2 overflow-x-auto no-scrollbar px-4 py-2 scroll-snap-x">
+    <div className="relative z-10">
+      {/* 遮罩层：点击关闭下拉 */}
+      {openKey && (
+        <div
+          className="fixed inset-0 z-20"
+          onClick={() => setOpenKey(null)}
+        />
+      )}
+
+      <div className="relative z-30 flex gap-2 overflow-x-auto no-scrollbar px-4 py-2 scroll-snap-x">
         {chips.map((chip) => (
           <button
             key={chip.key}
             onClick={() => togglePanel(chip.key)}
             className={cn(
-              'flex items-center gap-1 px-3 h-8 rounded-full text-xs whitespace-nowrap border transition-colors tap-area',
+              'relative z-30 flex items-center gap-1 px-3 h-8 rounded-full text-xs whitespace-nowrap border transition-colors tap-area',
               chip.active
                 ? 'bg-math-accent text-white border-math-accent'
                 : 'bg-card text-ink-soft border-line'
@@ -107,17 +120,15 @@ export function FilterChips({ filters, onChange, subjects, chapters }: FilterChi
         )}
       </div>
 
+      {/* 下拉面板 */}
       {openKey && (
-        <div className="absolute top-full left-0 right-0 z-30 bg-card border-b border-line shadow-card-hover animate-slide-down">
+        <div className="relative z-30 bg-card border-b border-line shadow-card-hover animate-slide-down">
           <div className="p-4 max-h-64 overflow-y-auto">
             {openKey === 'subject' && (
               <ChipGrid
                 items={subjects.map((s) => ({ id: s.id, label: s.name, color: s.color }))}
                 selectedId={filters.subject_id}
-                onSelect={(id) => {
-                  onChange({ ...filters, subject_id: id, chapter_id: undefined });
-                  setOpenKey(null);
-                }}
+                onSelect={(id) => selectAndClose('subject', { ...filters, subject_id: id, chapter_id: undefined })}
               />
             )}
             {openKey === 'chapter' && (
@@ -125,10 +136,7 @@ export function FilterChips({ filters, onChange, subjects, chapters }: FilterChi
                 items={chapters.map((c) => ({ id: c.id, label: c.name }))}
                 selectedId={filters.chapter_id}
                 emptyText={filters.subject_id ? '该科目暂无章节' : '请先选择科目'}
-                onSelect={(id) => {
-                  onChange({ ...filters, chapter_id: id });
-                  setOpenKey(null);
-                }}
+                onSelect={(id) => selectAndClose('chapter', { ...filters, chapter_id: id })}
               />
             )}
             {openKey === 'difficulty' && (
@@ -136,10 +144,7 @@ export function FilterChips({ filters, onChange, subjects, chapters }: FilterChi
                 {[1, 2, 3, 4, 5].map((d) => (
                   <button
                     key={d}
-                    onClick={() => {
-                      onChange({ ...filters, difficulty: d });
-                      setOpenKey(null);
-                    }}
+                    onClick={() => selectAndClose('difficulty', { ...filters, difficulty: d })}
                     className={cn(
                       'flex items-center gap-1 px-3 h-9 rounded-full text-xs border',
                       filters.difficulty === d
@@ -161,10 +166,7 @@ export function FilterChips({ filters, onChange, subjects, chapters }: FilterChi
                 ].map((s) => (
                   <button
                     key={s.value}
-                    onClick={() => {
-                      onChange({ ...filters, review_status: s.value as any });
-                      setOpenKey(null);
-                    }}
+                    onClick={() => selectAndClose('status', { ...filters, review_status: s.value as any })}
                     className={cn(
                       'px-3 h-9 rounded-full text-xs border',
                       filters.review_status === s.value
@@ -182,10 +184,7 @@ export function FilterChips({ filters, onChange, subjects, chapters }: FilterChi
                 {ERROR_TAGS.map((tag) => (
                   <button
                     key={tag}
-                    onClick={() => {
-                      onChange({ ...filters, error_tag: tag });
-                      setOpenKey(null);
-                    }}
+                    onClick={() => selectAndClose('error_tag', { ...filters, error_tag: tag })}
                     className={cn(
                       'px-3 h-9 rounded-full text-xs border',
                       filters.error_tag === tag

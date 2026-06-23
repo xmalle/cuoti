@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { Plus, BookOpenText } from 'lucide-react';
 import Link from 'next/link';
 import { StatsBar } from '@/components/home/StatsBar';
+import { SearchBar } from '@/components/home/SearchBar';
 import { FilterChips } from '@/components/home/FilterChips';
 import { QuestionCard } from '@/components/home/QuestionCard';
 import { ListSkeleton } from '@/components/ui/Skeleton';
@@ -63,6 +64,13 @@ export default function HomePage() {
     [load]
   );
 
+  const handleSearchChange = useCallback(
+    (search: string) => {
+      load({ ...filters, search: search || undefined });
+    },
+    [filters, load]
+  );
+
   if (!configured) {
     return (
       <EmptyState
@@ -76,6 +84,8 @@ export default function HomePage() {
   return (
     <div>
       <StatsBar total={stats.total} pending={stats.pending} />
+
+      <SearchBar value={filters.search || ''} onChange={handleSearchChange} />
 
       <FilterChips
         filters={filters}
