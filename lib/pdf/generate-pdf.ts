@@ -160,14 +160,21 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
       onStatus?.(`正在生成 PDF（${questionIndex}/${totalQuestions}）`);
       onProgress?.(questionIndex - 1, totalQuestions);
 
-      // 题目标题
+      // 题目标题 + 星级
       const titleText = `第 ${questionIndex} 题${q.source ? `  ${q.source}` : ''}`;
       if (yPos + 10 > pageHeight - marginBottom) {
         pdf.addPage();
         yPos = marginTop;
       }
       const titleH = addTextImage(pdf, titleText, marginX, yPos, 11, [0x2b, 0x2a, 0x28], contentWidth, 'bold');
-      yPos += Math.max(titleH, 5) + 3;
+      // 星级
+      const stars = '★'.repeat(q.difficulty) + '☆'.repeat(5 - q.difficulty);
+      const subjectColor = q.subject?.color || '#B8472F';
+      const r = parseInt(subjectColor.slice(1, 3), 16);
+      const g = parseInt(subjectColor.slice(3, 5), 16);
+      const b = parseInt(subjectColor.slice(5, 7), 16);
+      addTextImage(pdf, stars, marginX, yPos + Math.max(titleH, 5), 10, [r, g, b], contentWidth);
+      yPos += Math.max(titleH, 5) + 6;
 
       // 题目图片
       const questionImages = q.images?.filter((i) => i.type === 'question') || [];
