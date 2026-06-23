@@ -255,7 +255,7 @@ export function QuestionForm({ editingQuestion, onSaved }: Props) {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="w-full h-12 rounded-card bg-math-accent text-white text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-60"
+          className="w-full h-14 rounded-card bg-math-accent text-white text-base font-medium flex items-center justify-center gap-2 disabled:opacity-60"
         >
           {saving && <Loader2 size={16} className="animate-spin" />}
           {saving ? '保存中...' : editingQuestion ? '更新错题' : '保存错题'}
