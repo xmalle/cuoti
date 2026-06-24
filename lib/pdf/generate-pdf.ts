@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import type { Question } from '@/types';
 import { getPublicImageUrl } from '@/lib/supabase/client';
+import { stitchImageUrls } from '@/lib/image/stitch';
 
 interface ExportOptions {
   groupByChapter: boolean;
@@ -176,11 +177,27 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
       addTextImage(pdf, stars, marginX, yPos + Math.max(titleH, 5), 10, [r, g, b], contentWidth);
       yPos += Math.max(titleH, 5) + 6;
 
-      // 题目图片
+      // 题目图片（≥2 张时自动上下拼合）
       const questionImages = q.images?.filter((i) => i.type === 'question') || [];
-      for (const imgData of questionImages) {
-        const url = getPublicImageUrl(imgData.storage_path);
-        yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
+      if (questionImages.length >= 2) {
+        onStatus?.(`正在处理第 ${questionIndex} 题图片（共 ${totalQuestions} 题）…`);
+        const urls = questionImages.map((img) => getPublicImageUrl(img.storage_path));
+        try {
+          const stitchedBase64 = await stitchImageUrls(urls, 'vertical', 0);
+          yPos = await addImageToPdf(pdf, stitchedBase64, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
+        } catch {
+          // 拼合失败则逐张写入
+          for (const imgData of questionImages) {
+            const url = getPublicImageUrl(imgData.storage_path);
+            yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
+          }
+        }
+        onStatus?.(`正在生成 PDF（${questionIndex}/${totalQuestions}）`);
+      } else {
+        for (const imgData of questionImages) {
+          const url = getPublicImageUrl(imgData.storage_path);
+          yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
+        }
       }
 
       // 错因标签
@@ -204,9 +221,23 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
           const labelH = addTextImage(pdf, '解析：', marginX, yPos, 9, [0x8a, 0x87, 0x80], contentWidth);
           yPos += Math.max(labelH, 4) + 2;
 
-          for (const imgData of analysisImages) {
-            const url = getPublicImageUrl(imgData.storage_path);
-            yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
+          // 解析图片（≥2 张时自动上下拼合）
+          if (analysisImages.length >= 2) {
+            const urls = analysisImages.map((img) => getPublicImageUrl(img.storage_path));
+            try {
+              const stitchedBase64 = await stitchImageUrls(urls, 'vertical', 0);
+              yPos = await addImageToPdf(pdf, stitchedBase64, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
+            } catch {
+              for (const imgData of analysisImages) {
+                const url = getPublicImageUrl(imgData.storage_path);
+                yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
+              }
+            }
+          } else {
+            for (const imgData of analysisImages) {
+              const url = getPublicImageUrl(imgData.storage_path);
+              yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
+            }
           }
 
           if (q.analysis_supplement) {
