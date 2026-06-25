@@ -24,7 +24,7 @@ const defaultFilters: ExportFiltersState = {
   difficulty_min: 1,
   difficulty_max: 5,
   group_by_chapter: true,
-  include_analysis: true,
+  include_analysis: false,
 };
 
 export default function ExportPage() {
@@ -33,6 +33,8 @@ export default function ExportPage() {
   const [generating, setGenerating] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [statusText, setStatusText] = useState('');
+  const [imageMaxHeight, setImageMaxHeight] = useState(110);
+  const [questionGap, setQuestionGap] = useState(30);
 
   const handlePreview = useCallback(async () => {
     setPreviewing(true);
@@ -58,6 +60,8 @@ export default function ExportPage() {
       await generatePdf(questions, {
         groupByChapter: filters.group_by_chapter,
         includeAnalysis: filters.include_analysis,
+        maxImageHeight: imageMaxHeight,
+        questionGap: questionGap,
         onStatus: (msg) => setStatusText(msg),
       });
       toast.success('PDF 已生成并下载');
@@ -67,13 +71,58 @@ export default function ExportPage() {
       setGenerating(false);
       setStatusText('');
     }
-  }, [filters]);
+  }, [filters, imageMaxHeight, questionGap]);
 
   return (
     <div className="px-4 pt-5 pb-4">
       <h1 className="text-xl font-bold text-ink mb-4">导出 PDF</h1>
 
       <ExportFilters filters={filters} onChange={setFilters} />
+
+      {/* 页面布局选项 */}
+      <div className="mt-3 bg-card rounded-card shadow-card p-4 flex flex-col gap-5">
+        <h3 className="text-sm font-medium text-ink">页面布局</h3>
+
+        <div>
+          <div className="flex items-center justify-between text-sm text-ink-soft mb-2">
+            <span>题目图片最大高度</span>
+            <span className="text-math-accent font-medium">{imageMaxHeight}mm</span>
+          </div>
+          <input
+            type="range"
+            min={60}
+            max={150}
+            step={5}
+            value={imageMaxHeight}
+            onChange={(e) => setImageMaxHeight(Number(e.target.value))}
+            className="w-full accent-math-accent"
+          />
+          <div className="flex justify-between text-xs text-ink-muted mt-1">
+            <span>小 60mm</span>
+            <span>大 150mm</span>
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between text-sm text-ink-soft mb-2">
+            <span>题目之间间距</span>
+            <span className="text-math-accent font-medium">{questionGap}mm</span>
+          </div>
+          <input
+            type="range"
+            min={10}
+            max={60}
+            step={5}
+            value={questionGap}
+            onChange={(e) => setQuestionGap(Number(e.target.value))}
+            className="w-full accent-math-accent"
+          />
+          <div className="flex justify-between text-xs text-ink-muted mt-1">
+            <span>密 10mm</span>
+            <span>疏 60mm</span>
+          </div>
+        </div>
+      </div>
 
       {/* 预览数量 */}
       <div className="mt-4 bg-card rounded-card shadow-card p-4 flex items-center justify-between">

@@ -6,6 +6,8 @@ import { stitchImageUrls } from '@/lib/image/stitch';
 interface ExportOptions {
   groupByChapter: boolean;
   includeAnalysis: boolean;
+  maxImageHeight?: number;
+  questionGap?: number;
   onProgress?: (done: number, total: number) => void;
   onStatus?: (msg: string) => void;
 }
@@ -19,9 +21,9 @@ const marginX = 15;
 const marginTop = 15;
 const marginBottom = 15;
 const contentWidth = pageWidth - marginX * 2;
-const maxImageHeight = 130; // 单张图片最大高度
+const defaultMaxImageHeight = 110; // 默认单张图片最大高度
 const imageBottomGap = 6; // 图片与下方内容间距
-const questionGap = 25; // 题目之间留白，方便手写
+const defaultQuestionGap = 30; // 默认题目之间留白
 
 // 将图片 URL 转为 base64 data URL（解决 iOS Safari 跨域问题）
 async function imageUrlToBase64(url: string): Promise<string> {
@@ -124,7 +126,13 @@ function addTextImage(
 
 // 生成 PDF（单题流式布局，控制图片尺寸）
 export async function generatePdf(questions: Question[], options: ExportOptions): Promise<void> {
-  const { groupByChapter, onProgress, onStatus } = options;
+  const {
+    groupByChapter,
+    onProgress,
+    onStatus,
+    maxImageHeight = defaultMaxImageHeight,
+    questionGap = defaultQuestionGap,
+  } = options;
 
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   let questionIndex = 0;
@@ -150,7 +158,7 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
         yPos = marginTop;
       }
 
-      yPos = await renderQuestion(pdf, q, questionIndex, marginX, yPos, contentWidth);
+      yPos = await renderQuestion(pdf, q, questionIndex, marginX, yPos, contentWidth, maxImageHeight);
       yPos += questionGap;
     }
   }
@@ -191,7 +199,8 @@ async function renderQuestion(
   index: number,
   x: number,
   y: number,
-  width: number
+  width: number,
+  maxImageHeight: number
 ): Promise<number> {
   let yPos = y;
 
@@ -215,17 +224,17 @@ async function renderQuestion(
     const urls = questionImages.map((img) => getPublicImageUrl(img.storage_path));
     try {
       const stitchedBase64 = await stitchImageUrls(urls, 'vertical', 0);
-      yPos = await addImageToPdf(pdf, stitchedBase64, x, yPos, width);
+      yPos = await addImageToPdf(pdf, stitchedBase64, x, yPos, width, maxImageHeight);
     } catch {
       for (const imgData of questionImages) {
         const url = getPublicImageUrl(imgData.storage_path);
-        yPos = await addImageToPdf(pdf, url, x, yPos, width);
+        yPos = await addImageToPdf(pdf, url, x, yPos, width, maxImageHeight);
       }
     }
   } else {
     for (const imgData of questionImages) {
       const url = getPublicImageUrl(imgData.storage_path);
-      yPos = await addImageToPdf(pdf, url, x, yPos, width);
+      yPos = await addImageToPdf(pdf, url, x, yPos, width, maxImageHeight);
     }
   }
 
@@ -244,7 +253,8 @@ async function addImageToPdf(
   url: string,
   x: number,
   yPos: number,
-  imgWidth: number
+  imgWidth: number,
+  maxImageHeight: number
 ): Promise<number> {
   const base64 = await imageUrlToBase64(url);
   const { img, w, h } = await loadImage(base64);
@@ -252,7 +262,7 @@ async function addImageToPdf(
   const ratio = h / w;
   let imgHeight = imgWidth * ratio;
 
-  // 高度超过 130mm 时等比例缩小
+  // 高度超过限制时等比例缩小
   if (imgHeight > maxImageHeight) {
     imgHeight = maxImageHeight;
     imgWidth = imgHeight / ratio;
