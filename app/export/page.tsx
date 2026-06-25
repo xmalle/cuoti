@@ -33,8 +33,8 @@ export default function ExportPage() {
   const [generating, setGenerating] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [statusText, setStatusText] = useState('');
-  const [imageScale, setImageScale] = useState(85);
-  const [questionGap, setQuestionGap] = useState(30);
+  const [imageScale, setImageScale] = useState(50);
+  const [questionGap, setQuestionGap] = useState(60);
 
   const handlePreview = useCallback(async () => {
     setPreviewing(true);
