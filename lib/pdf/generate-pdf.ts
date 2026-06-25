@@ -122,7 +122,7 @@ function addTextImage(
   return heightMm;
 }
 
-// 生成 PDF（上下布局：一页尽量放两题）
+// 生成 PDF（上下布局：一页两题，平分页面）
 export async function generatePdf(questions: Question[], options: ExportOptions): Promise<void> {
   const { groupByChapter, onProgress, onStatus } = options;
 
@@ -133,26 +133,31 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
   const totalQuestions = questions.length;
 
   for (const group of groups) {
-    // 章节标题独占一行
+    // 章节标题独占一行，返回内容起始 y
+    let contentTop = marginTop;
     if (groupByChapter && group.name) {
-      await renderChapterTitle(pdf, group.name, group.items.length);
+      contentTop = await renderChapterTitle(pdf, group.name, group.items.length);
     }
 
-    let yPos = marginTop;
+    const availableHeight = pageHeight - marginBottom - contentTop;
+    const halfPage = availableHeight / 2;
+    const maxImageHeight = halfPage - 38; // 标题、星级、标签、留白
+
+    let slot = 0; // 0 = 上半页，1 = 下半页
 
     for (const q of group.items) {
       questionIndex++;
       onStatus?.(`正在生成 PDF（${questionIndex}/${totalQuestions}）`);
       onProgress?.(questionIndex - 1, totalQuestions);
 
-      // 每道题固定预留约半页高度，放不下则换页
-      if (yPos > marginTop && yPos + 120 > pageHeight - marginBottom) {
+      if (slot === 0 && questionIndex > 1) {
         pdf.addPage();
-        yPos = marginTop;
       }
 
-      const endY = await renderQuestion(pdf, q, questionIndex, marginX, yPos, contentWidth);
-      yPos = endY + questionGap;
+      const y = contentTop + slot * halfPage;
+      await renderQuestion(pdf, q, questionIndex, marginX, y, contentWidth, maxImageHeight);
+
+      slot = slot === 0 ? 1 : 0;
     }
   }
 
@@ -163,21 +168,18 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
   onStatus?.('');
 }
 
-// 渲染章节标题
-async function renderChapterTitle(pdf: jsPDF, name: string, count: number) {
-  let yPos = marginTop;
+// 渲染章节标题，返回内容区域起始 y
+async function renderChapterTitle(pdf: jsPDF, name: string, count: number): Promise<number> {
   const titleHeight = 18;
-  if (yPos + titleHeight > pageHeight - marginBottom) {
-    pdf.addPage();
-    yPos = marginTop;
-  }
+  const titleGap = 6;
   pdf.setFillColor(0xf5, 0xf4, 0xee);
-  pdf.rect(marginX, yPos, contentWidth, titleHeight, 'F');
+  pdf.rect(marginX, marginTop, contentWidth, titleHeight, 'F');
   pdf.setDrawColor(0xb8, 0x47, 0x2f);
   pdf.setLineWidth(0.8);
-  pdf.line(marginX, yPos, marginX, yPos + titleHeight);
-  addTextImage(pdf, name, marginX + 5, yPos + 2, 14, [0x2b, 0x2a, 0x28], contentWidth - 5, 'bold');
-  addTextImage(pdf, `${count} 题`, marginX + 5, yPos + 11, 9, [0x8a, 0x87, 0x80], contentWidth - 5);
+  pdf.line(marginX, marginTop, marginX, marginTop + titleHeight);
+  addTextImage(pdf, name, marginX + 5, marginTop + 2, 14, [0x2b, 0x2a, 0x28], contentWidth - 5, 'bold');
+  addTextImage(pdf, `${count} 题`, marginX + 5, marginTop + 11, 9, [0x8a, 0x87, 0x80], contentWidth - 5);
+  return marginTop + titleHeight + titleGap;
 }
 
 // 渲染单道题目，返回结束 y 坐标
@@ -187,15 +189,12 @@ async function renderQuestion(
   index: number,
   x: number,
   y: number,
-  width: number
+  width: number,
+  maxImageHeight: number
 ): Promise<number> {
   let yPos = y;
 
   // 标题
-  if (yPos + 10 > pageHeight - marginBottom) {
-    pdf.addPage();
-    yPos = marginTop;
-  }
   const titleText = `第 ${index} 题${q.source ? `  ${q.source}` : ''}`;
   const titleH = addTextImage(pdf, titleText, x, yPos, 10, [0x2b, 0x2a, 0x28], width, 'bold');
   yPos += Math.max(titleH, 4) + 2;
@@ -210,7 +209,6 @@ async function renderQuestion(
   yPos += Math.max(starH, 3) + 3;
 
   // 题目图片（≥2 张时自动上下拼合）
-  const maxImageHeight = pageHeight / 2 - 45; // 单张图片最大高度，留出足够空白
   const questionImages = q.images?.filter((i) => i.type === 'question') || [];
   if (questionImages.length >= 2) {
     const urls = questionImages.map((img) => getPublicImageUrl(img.storage_path));
@@ -232,10 +230,6 @@ async function renderQuestion(
 
   // 错因标签
   if (q.error_tags.length > 0) {
-    if (yPos + 6 > pageHeight - marginBottom) {
-      pdf.addPage();
-      yPos = marginTop;
-    }
     const tagH = addTextImage(pdf, q.error_tags.join('  '), x, yPos, 7, [0x5c, 0x5a, 0x55], width);
     yPos += Math.max(tagH, 3) + 2;
   }
