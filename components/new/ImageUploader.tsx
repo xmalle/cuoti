@@ -1,10 +1,10 @@
 'use client';
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Plus, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import { compressImages } from '@/lib/image/compress';
-import { stitchImages } from '@/lib/image/stitch';
+import { stitchFilesOrUrls } from '@/lib/image/stitch';
 import { toast } from '@/store/toast';
 
 interface ImageUploaderProps {
@@ -14,6 +14,7 @@ interface ImageUploaderProps {
   files: File[];
   onChange: (files: File[] | ((prev: File[]) => File[])) => void;
   existingUrls?: string[];
+  onExistingChange?: (urls: string[]) => void;
 }
 
 type StitchDirection = 'vertical' | 'horizontal';
@@ -26,6 +27,7 @@ export function ImageUploader({
   files,
   onChange,
   existingUrls = [],
+  onExistingChange,
 }: ImageUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [compressing, setCompressing] = useState(false);
@@ -70,11 +72,22 @@ export function ImageUploader({
     setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const total = existingUrls.length + files.length;
+  type DisplayItem =
+    | { kind: 'existing'; index: number; src: string }
+    | { kind: 'file'; index: number; src: string };
+
+  const displayItems: DisplayItem[] = useMemo(() => {
+    const items: DisplayItem[] = [];
+    existingUrls.forEach((url, i) => items.push({ kind: 'existing', index: i, src: url }));
+    files.forEach((_, i) => items.push({ kind: 'file', index: i, src: previewUrls[i] }));
+    return items;
+  }, [existingUrls, files, previewUrls]);
+
+  const total = displayItems.length;
 
   // 打开拼合抽屉
   const openDrawer = () => {
-    setOrder(files.map((_, i) => i));
+    setOrder(displayItems.map((_, i) => i));
     setDirection('vertical');
     setGap(0);
     setDrawerOpen(true);
@@ -101,14 +114,17 @@ export function ImageUploader({
   const updatePreview = useCallback(async () => {
     if (order.length < 2) { setPreviewDataUrl(''); return; }
     try {
-      const orderedFiles = order.map((i) => files[i]);
-      const result = await stitchImages(orderedFiles, direction, gap);
+      const orderedItems = order.map((i) => {
+        const item = displayItems[i];
+        return item.kind === 'existing' ? item.src : files[item.index];
+      });
+      const result = await stitchFilesOrUrls(orderedItems, direction, gap);
       const url = URL.createObjectURL(result);
       setPreviewDataUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
     } catch {
       setPreviewDataUrl('');
     }
-  }, [order, direction, gap, files]);
+  }, [order, direction, gap, displayItems, files]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -120,12 +136,16 @@ export function ImageUploader({
   const handleConfirmStitch = async () => {
     setStitching(true);
     try {
-      const orderedFiles = order.map((i) => files[i]);
-      const result = await stitchImages(orderedFiles, direction, gap);
+      const orderedItems = order.map((i) => {
+        const item = displayItems[i];
+        return item.kind === 'existing' ? item.src : files[item.index];
+      });
+      const result = await stitchFilesOrUrls(orderedItems, direction, gap);
       // 压缩拼合结果
       const compressed = await compressImages([result], 1200);
-      // 替换文件列表
+      // 用拼合后的单张图替换整个列表
       onChange(compressed);
+      onExistingChange?.([]);
       setPreviewUrls([URL.createObjectURL(compressed[0])]);
       toast.success('已拼合为 1 张图片');
       closeDrawer();
@@ -146,31 +166,21 @@ export function ImageUploader({
       </div>
 
       <div className="grid grid-cols-4 gap-2">
-        {/* 已有图片（编辑模式） */}
-        {existingUrls.map((url, i) => (
-          <div
-            key={`existing-${i}`}
-            className="aspect-square rounded-lg overflow-hidden bg-paper relative"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt="" className="w-full h-full object-cover" />
-          </div>
-        ))}
-
-        {/* 新选图片预览 */}
-        {files.map((file, i) => (
+        {displayItems.map((item, i) => (
           <div
             key={i}
             className="aspect-square rounded-lg overflow-hidden bg-paper relative"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={previewUrls[i]} alt="" className="w-full h-full object-cover" />
-            <button
-              onClick={() => removeFile(i)}
-              className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-ink/70 text-white flex items-center justify-center"
-            >
-              <X size={12} />
-            </button>
+            <img src={item.src} alt="" className="w-full h-full object-cover" />
+            {item.kind === 'file' && (
+              <button
+                onClick={() => removeFile(item.index)}
+                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-ink/70 text-white flex items-center justify-center"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
         ))}
 
@@ -197,7 +207,7 @@ export function ImageUploader({
       </div>
 
       {/* 拼合按钮 */}
-      {files.length >= 2 && (
+      {total >= 2 && (
         <button
           onClick={openDrawer}
           className="mt-2 px-3 py-1.5 rounded-[10px] border text-xs flex items-center gap-1"
@@ -207,7 +217,7 @@ export function ImageUploader({
         </button>
       )}
 
-      {required && files.length === 0 && existingUrls.length === 0 && (
+      {required && total === 0 && (
         <p className="text-[10px] text-danger mt-1">请至少上传一张图片</p>
       )}
 
@@ -281,10 +291,10 @@ export function ImageUploader({
               <div className="mb-3">
                 <span className="text-[10px] text-ink-muted mb-1 block">调整顺序</span>
                 <div className="flex gap-2 overflow-x-auto py-1">
-                  {order.map((fileIdx, pos) => (
-                    <div key={fileIdx} className="flex items-center gap-1 flex-shrink-0">
+                  {order.map((itemIdx, pos) => (
+                    <div key={itemIdx} className="flex items-center gap-1 flex-shrink-0">
                       <button
-                        onClick={() => moveItem(fileIdx, -1)}
+                        onClick={() => moveItem(itemIdx, -1)}
                         disabled={pos === 0}
                         className="w-5 h-5 rounded flex items-center justify-center text-ink-muted disabled:opacity-30"
                       >
@@ -292,10 +302,10 @@ export function ImageUploader({
                       </button>
                       <div className="w-12 h-12 rounded-lg overflow-hidden bg-paper flex-shrink-0">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={previewUrls[fileIdx]} alt="" className="w-full h-full object-cover" />
+                        <img src={displayItems[itemIdx]?.src} alt="" className="w-full h-full object-cover" />
                       </div>
                       <button
-                        onClick={() => moveItem(fileIdx, 1)}
+                        onClick={() => moveItem(itemIdx, 1)}
                         disabled={pos === order.length - 1}
                         className="w-5 h-5 rounded flex items-center justify-center text-ink-muted disabled:opacity-30"
                       >

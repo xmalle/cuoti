@@ -137,6 +137,30 @@ function canvasToFile(canvas: HTMLCanvasElement): Promise<File> {
   });
 }
 
+// 将图片 URL 转为 File（用于编辑模式下拼合已上传图片）
+export async function urlToFile(url: string, filename?: string): Promise<File> {
+  const res = await fetch(url, { mode: 'cors' });
+  if (!res.ok) {
+    throw new Error(`图片下载失败: ${res.status}`);
+  }
+  const blob = await res.blob();
+  const name = filename || `image_${Date.now()}.jpg`;
+  return new File([blob], name, { type: blob.type || 'image/jpeg', lastModified: Date.now() });
+}
+
+// 混合拼合：支持 File 与 URL 混用
+export async function stitchFilesOrUrls(
+  items: (File | string)[],
+  direction: 'vertical' | 'horizontal',
+  gap: number = 0,
+  gapColor: string = '#FFFFFF'
+): Promise<File> {
+  const files = await Promise.all(
+    items.map((item) => (typeof item === 'string' ? urlToFile(item) : item))
+  );
+  return stitchImages(files, direction, gap, gapColor);
+}
+
 /**
  * 将多个图片 URL 拼合为一张（用于 PDF 导出）
  * @returns 拼合后的 base64 data URL

@@ -49,18 +49,35 @@ export function QuestionForm({ editingQuestion, onSaved }: Props) {
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectColor, setNewSubjectColor] = useState('#B8472F');
 
-  const existingQuestionUrls =
-    editingQuestion?.images
-      ?.filter((i) => i.type === 'question')
-      .map((i) => getPublicImageUrl(i.storage_path)) || [];
-  const existingAnalysisUrls =
-    editingQuestion?.images
-      ?.filter((i) => i.type === 'analysis')
-      .map((i) => getPublicImageUrl(i.storage_path)) || [];
+  const [existingQuestionUrls, setExistingQuestionUrls] = useState<string[]>(
+    () =>
+      editingQuestion?.images
+        ?.filter((i) => i.type === 'question')
+        .map((i) => getPublicImageUrl(i.storage_path)) || []
+  );
+  const [existingAnalysisUrls, setExistingAnalysisUrls] = useState<string[]>(
+    () =>
+      editingQuestion?.images
+        ?.filter((i) => i.type === 'analysis')
+        .map((i) => getPublicImageUrl(i.storage_path)) || []
+  );
 
   useEffect(() => {
     listSubjects().then(setSubjects).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    setExistingQuestionUrls(
+      editingQuestion?.images
+        ?.filter((i) => i.type === 'question')
+        .map((i) => getPublicImageUrl(i.storage_path)) || []
+    );
+    setExistingAnalysisUrls(
+      editingQuestion?.images
+        ?.filter((i) => i.type === 'analysis')
+        .map((i) => getPublicImageUrl(i.storage_path)) || []
+    );
+  }, [editingQuestion]);
 
   const handleCreateSubject = async () => {
     if (!newSubjectName.trim()) return;
@@ -181,6 +198,7 @@ export function QuestionForm({ editingQuestion, onSaved }: Props) {
           files={questionFiles}
           onChange={setQuestionFiles}
           existingUrls={existingQuestionUrls}
+          onExistingChange={setExistingQuestionUrls}
         />
       </section>
 
@@ -191,6 +209,7 @@ export function QuestionForm({ editingQuestion, onSaved }: Props) {
           files={analysisFiles}
           onChange={setAnalysisFiles}
           existingUrls={existingAnalysisUrls}
+          onExistingChange={setExistingAnalysisUrls}
         />
       </section>
 
