@@ -21,7 +21,7 @@ const marginBottom = 14;
 const contentWidth = pageWidth - marginX * 2;
 const colGap = 10;
 const colWidth = (contentWidth - colGap) / 2;
-const questionGap = 16; // 题目之间留白，方便手写
+const questionGap = 30; // 题目之间留白，方便手写
 
 // 将图片 URL 转为 base64 data URL（解决 iOS Safari 跨域问题）
 async function imageUrlToBase64(url: string): Promise<string> {
@@ -210,22 +210,23 @@ async function renderQuestion(
   yPos += Math.max(starH, 3) + 3;
 
   // 题目图片（≥2 张时自动上下拼合）
+  const maxImageHeight = pageHeight / 2 - 45; // 单张图片最大高度，留出足够空白
   const questionImages = q.images?.filter((i) => i.type === 'question') || [];
   if (questionImages.length >= 2) {
     const urls = questionImages.map((img) => getPublicImageUrl(img.storage_path));
     try {
       const stitchedBase64 = await stitchImageUrls(urls, 'vertical', 0);
-      yPos = await addImageToPdf(pdf, stitchedBase64, x, yPos, width);
+      yPos = await addImageToPdf(pdf, stitchedBase64, x, yPos, width, maxImageHeight);
     } catch {
       for (const imgData of questionImages) {
         const url = getPublicImageUrl(imgData.storage_path);
-        yPos = await addImageToPdf(pdf, url, x, yPos, width);
+        yPos = await addImageToPdf(pdf, url, x, yPos, width, maxImageHeight);
       }
     }
   } else {
     for (const imgData of questionImages) {
       const url = getPublicImageUrl(imgData.storage_path);
-      yPos = await addImageToPdf(pdf, url, x, yPos, width);
+      yPos = await addImageToPdf(pdf, url, x, yPos, width, maxImageHeight);
     }
   }
 
@@ -248,13 +249,20 @@ async function addImageToPdf(
   url: string,
   x: number,
   yPos: number,
-  imgWidth: number
+  imgWidth: number,
+  maxHeight: number = Infinity
 ): Promise<number> {
   const base64 = await imageUrlToBase64(url);
   const { img, w, h } = await loadImage(base64);
 
   const ratio = h / w;
-  const imgHeight = imgWidth * ratio;
+  let imgHeight = imgWidth * ratio;
+
+  // 如果图片高度超过限制，等比例缩小
+  if (imgHeight > maxHeight) {
+    imgHeight = maxHeight;
+    imgWidth = imgHeight / ratio;
+  }
 
   let remainingHeight = imgHeight;
   let sourceY = 0;
