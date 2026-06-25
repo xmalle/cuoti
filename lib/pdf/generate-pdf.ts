@@ -13,6 +13,16 @@ interface ExportOptions {
 // 中文字体栈（覆盖主流平台）
 const FONT_STACK = 'system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif';
 
+const pageWidth = 210;
+const pageHeight = 297;
+const marginX = 12;
+const marginTop = 14;
+const marginBottom = 14;
+const contentWidth = pageWidth - marginX * 2;
+const colGap = 10;
+const colWidth = (contentWidth - colGap) / 2;
+const questionGap = 16; // 题目之间留白，方便手写
+
 // 将图片 URL 转为 base64 data URL（解决 iOS Safari 跨域问题）
 async function imageUrlToBase64(url: string): Promise<string> {
   try {
@@ -48,7 +58,7 @@ function renderTextLines(
   maxWidthMm: number,
   fontWeight: 'normal' | 'bold' = 'normal'
 ): { dataUrl: string; heightMm: number }[] {
-  const SCALE = 3; // 渲染倍率，提高清晰度
+  const SCALE = 3;
   const PX_PER_MM = 96 / 25.4;
   const PT_TO_MM = 25.4 / 72;
 
@@ -56,7 +66,6 @@ function renderTextLines(
   const pxFont = fontSizeMm * PX_PER_MM * SCALE;
   const pxMaxWidth = Math.ceil(maxWidthMm * PX_PER_MM * SCALE);
 
-  // 测量文本换行
   const mCanvas = document.createElement('canvas');
   const mCtx = mCanvas.getContext('2d')!;
   mCtx.font = `${fontWeight} ${pxFont}px ${FONT_STACK}`;
@@ -78,7 +87,6 @@ function renderTextLines(
   const lineHPx = pxFont * 1.5;
   const lineHMm = lineHPx / (SCALE * PX_PER_MM);
 
-  // 逐行渲染到 Canvas
   return lines.map((line) => {
     const canvas = document.createElement('canvas');
     canvas.width = pxMaxWidth;
@@ -95,7 +103,6 @@ function renderTextLines(
   });
 }
 
-// 将单行文本渲染为图片添加到 PDF，返回占用高度
 function addTextImage(
   pdf: jsPDF,
   text: string,
@@ -115,153 +122,134 @@ function addTextImage(
   return heightMm;
 }
 
-// 生成 PDF（中文 Canvas 渲染 + 图片 addImage 方案）v20250624
+// 生成 PDF（双栏布局：一页两题）
 export async function generatePdf(questions: Question[], options: ExportOptions): Promise<void> {
-  const { groupByChapter, includeAnalysis, onProgress, onStatus } = options;
+  const { groupByChapter, onProgress, onStatus } = options;
 
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const pageWidth = 210;
-  const pageHeight = 297;
-  const marginX = 12;
-  const marginTop = 14;
-  const marginBottom = 14;
-  const contentWidth = pageWidth - marginX * 2;
-  let yPos = marginTop;
   let questionIndex = 0;
 
-  // 按章节分组
   const groups = groupByChapter ? groupByChapterFn(questions) : [{ name: '', items: questions }];
-
   const totalQuestions = questions.length;
 
   for (const group of groups) {
-    // 章节标题
+    // 章节标题独占一行
     if (groupByChapter && group.name) {
-      const titleHeight = 18;
-      if (yPos + titleHeight > pageHeight - marginBottom) {
-        pdf.addPage();
-        yPos = marginTop;
-      }
-      // 背景色块
-      pdf.setFillColor(0xf5, 0xf4, 0xee);
-      pdf.rect(marginX, yPos, contentWidth, titleHeight, 'F');
-      // 左侧色条
-      pdf.setDrawColor(0xb8, 0x47, 0x2f);
-      pdf.setLineWidth(0.8);
-      pdf.line(marginX, yPos, marginX, yPos + titleHeight);
-      // 章节名（Canvas 渲染中文）
-      addTextImage(pdf, group.name, marginX + 5, yPos + 2, 14, [0x2b, 0x2a, 0x28], contentWidth - 5, 'bold');
-      // 题数
-      addTextImage(pdf, `${group.items.length} 题`, marginX + 5, yPos + 11, 9, [0x8a, 0x87, 0x80], contentWidth - 5);
-      yPos += titleHeight + 4;
+      await renderChapterTitle(pdf, group.name, group.items.length);
     }
+
+    let leftY = marginTop;
+    let rightY = marginTop;
 
     for (const q of group.items) {
       questionIndex++;
       onStatus?.(`正在生成 PDF（${questionIndex}/${totalQuestions}）`);
       onProgress?.(questionIndex - 1, totalQuestions);
 
-      // 题目标题 + 星级
-      const titleText = `第 ${questionIndex} 题${q.source ? `  ${q.source}` : ''}`;
-      if (yPos + 10 > pageHeight - marginBottom) {
-        pdf.addPage();
-        yPos = marginTop;
-      }
-      const titleH = addTextImage(pdf, titleText, marginX, yPos, 11, [0x2b, 0x2a, 0x28], contentWidth, 'bold');
-      // 星级
-      const stars = '★'.repeat(q.difficulty) + '☆'.repeat(5 - q.difficulty);
-      const subjectColor = q.subject?.color || '#B8472F';
-      const r = parseInt(subjectColor.slice(1, 3), 16);
-      const g = parseInt(subjectColor.slice(3, 5), 16);
-      const b = parseInt(subjectColor.slice(5, 7), 16);
-      addTextImage(pdf, stars, marginX, yPos + Math.max(titleH, 5), 10, [r, g, b], contentWidth);
-      yPos += Math.max(titleH, 5) + 6;
-
-      // 题目图片（≥2 张时自动上下拼合）
-      const questionImages = q.images?.filter((i) => i.type === 'question') || [];
-      if (questionImages.length >= 2) {
-        onStatus?.(`正在处理第 ${questionIndex} 题图片（共 ${totalQuestions} 题）…`);
-        const urls = questionImages.map((img) => getPublicImageUrl(img.storage_path));
-        try {
-          const stitchedBase64 = await stitchImageUrls(urls, 'vertical', 0);
-          yPos = await addImageToPdf(pdf, stitchedBase64, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
-        } catch {
-          // 拼合失败则逐张写入
-          for (const imgData of questionImages) {
-            const url = getPublicImageUrl(imgData.storage_path);
-            yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
-          }
+      // 优先放到 y 较小的那一栏
+      if (leftY <= rightY) {
+        // 左栏
+        if (leftY + 40 > pageHeight - marginBottom) {
+          leftY = marginTop;
         }
-        onStatus?.(`正在生成 PDF（${questionIndex}/${totalQuestions}）`);
+        const endY = await renderQuestion(pdf, q, questionIndex, marginX, leftY, colWidth);
+        leftY = endY + questionGap;
       } else {
-        for (const imgData of questionImages) {
-          const url = getPublicImageUrl(imgData.storage_path);
-          yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
+        // 右栏
+        if (rightY + 40 > pageHeight - marginBottom) {
+          rightY = marginTop;
         }
+        const x = marginX + colWidth + colGap;
+        const endY = await renderQuestion(pdf, q, questionIndex, x, rightY, colWidth);
+        rightY = endY + questionGap;
       }
-
-      // 错因标签
-      if (q.error_tags.length > 0) {
-        if (yPos + 6 > pageHeight - marginBottom) {
-          pdf.addPage();
-          yPos = marginTop;
-        }
-        const tagH = addTextImage(pdf, q.error_tags.join('  '), marginX, yPos, 8, [0x5c, 0x5a, 0x55], contentWidth);
-        yPos += Math.max(tagH, 4) + 2;
-      }
-
-      // 解析
-      if (includeAnalysis) {
-        const analysisImages = q.images?.filter((i) => i.type === 'analysis') || [];
-        if (analysisImages.length > 0 || q.analysis_supplement) {
-          if (yPos + 6 > pageHeight - marginBottom) {
-            pdf.addPage();
-            yPos = marginTop;
-          }
-          const labelH = addTextImage(pdf, '解析：', marginX, yPos, 9, [0x8a, 0x87, 0x80], contentWidth);
-          yPos += Math.max(labelH, 4) + 2;
-
-          // 解析图片（≥2 张时自动上下拼合）
-          if (analysisImages.length >= 2) {
-            const urls = analysisImages.map((img) => getPublicImageUrl(img.storage_path));
-            try {
-              const stitchedBase64 = await stitchImageUrls(urls, 'vertical', 0);
-              yPos = await addImageToPdf(pdf, stitchedBase64, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
-            } catch {
-              for (const imgData of analysisImages) {
-                const url = getPublicImageUrl(imgData.storage_path);
-                yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
-              }
-            }
-          } else {
-            for (const imgData of analysisImages) {
-              const url = getPublicImageUrl(imgData.storage_path);
-              yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
-            }
-          }
-        }
-      }
-
-      // 分隔线
-      if (yPos + 4 > pageHeight - marginBottom) {
-        pdf.addPage();
-        yPos = marginTop;
-      }
-      pdf.setDrawColor(0xe2, 0xe0, 0xd8);
-      pdf.setLineWidth(0.3);
-      pdf.setLineDashPattern([2, 2], 0);
-      pdf.line(marginX, yPos, marginX + contentWidth, yPos);
-      pdf.setLineDashPattern([], 0);
-      yPos += 6;
     }
   }
 
-  // 下载
   const fileName = `错题本_${formatDateForFile(new Date())}.pdf`;
   pdf.save(fileName);
 
   onProgress?.(totalQuestions, totalQuestions);
   onStatus?.('');
+}
+
+// 渲染章节标题
+async function renderChapterTitle(pdf: jsPDF, name: string, count: number) {
+  let yPos = marginTop;
+  const titleHeight = 18;
+  if (yPos + titleHeight > pageHeight - marginBottom) {
+    pdf.addPage();
+    yPos = marginTop;
+  }
+  pdf.setFillColor(0xf5, 0xf4, 0xee);
+  pdf.rect(marginX, yPos, contentWidth, titleHeight, 'F');
+  pdf.setDrawColor(0xb8, 0x47, 0x2f);
+  pdf.setLineWidth(0.8);
+  pdf.line(marginX, yPos, marginX, yPos + titleHeight);
+  addTextImage(pdf, name, marginX + 5, yPos + 2, 14, [0x2b, 0x2a, 0x28], contentWidth - 5, 'bold');
+  addTextImage(pdf, `${count} 题`, marginX + 5, yPos + 11, 9, [0x8a, 0x87, 0x80], contentWidth - 5);
+}
+
+// 渲染单道题目，返回结束 y 坐标
+async function renderQuestion(
+  pdf: jsPDF,
+  q: Question,
+  index: number,
+  x: number,
+  y: number,
+  width: number
+): Promise<number> {
+  let yPos = y;
+
+  // 标题
+  if (yPos + 10 > pageHeight - marginBottom) {
+    pdf.addPage();
+    yPos = marginTop;
+  }
+  const titleText = `第 ${index} 题${q.source ? `  ${q.source}` : ''}`;
+  const titleH = addTextImage(pdf, titleText, x, yPos, 10, [0x2b, 0x2a, 0x28], width, 'bold');
+  yPos += Math.max(titleH, 4) + 2;
+
+  // 星级
+  const stars = '★'.repeat(q.difficulty) + '☆'.repeat(5 - q.difficulty);
+  const subjectColor = q.subject?.color || '#B8472F';
+  const r = parseInt(subjectColor.slice(1, 3), 16);
+  const g = parseInt(subjectColor.slice(3, 5), 16);
+  const b = parseInt(subjectColor.slice(5, 7), 16);
+  const starH = addTextImage(pdf, stars, x, yPos, 9, [r, g, b], width);
+  yPos += Math.max(starH, 3) + 3;
+
+  // 题目图片（≥2 张时自动上下拼合）
+  const questionImages = q.images?.filter((i) => i.type === 'question') || [];
+  if (questionImages.length >= 2) {
+    const urls = questionImages.map((img) => getPublicImageUrl(img.storage_path));
+    try {
+      const stitchedBase64 = await stitchImageUrls(urls, 'vertical', 0);
+      yPos = await addImageToPdf(pdf, stitchedBase64, x, yPos, width);
+    } catch {
+      for (const imgData of questionImages) {
+        const url = getPublicImageUrl(imgData.storage_path);
+        yPos = await addImageToPdf(pdf, url, x, yPos, width);
+      }
+    }
+  } else {
+    for (const imgData of questionImages) {
+      const url = getPublicImageUrl(imgData.storage_path);
+      yPos = await addImageToPdf(pdf, url, x, yPos, width);
+    }
+  }
+
+  // 错因标签
+  if (q.error_tags.length > 0) {
+    if (yPos + 6 > pageHeight - marginBottom) {
+      pdf.addPage();
+      yPos = marginTop;
+    }
+    const tagH = addTextImage(pdf, q.error_tags.join('  '), x, yPos, 7, [0x5c, 0x5a, 0x55], width);
+    yPos += Math.max(tagH, 3) + 2;
+  }
+
+  return yPos;
 }
 
 // 将图片添加到 PDF，自动分页
@@ -270,20 +258,14 @@ async function addImageToPdf(
   url: string,
   x: number,
   yPos: number,
-  contentWidth: number,
-  pageHeight: number,
-  marginTop: number,
-  marginBottom: number
+  imgWidth: number
 ): Promise<number> {
   const base64 = await imageUrlToBase64(url);
   const { img, w, h } = await loadImage(base64);
 
-  // 计算缩放后的尺寸
   const ratio = h / w;
-  const imgWidth = contentWidth;
   const imgHeight = imgWidth * ratio;
 
-  // 如果图片高度超过一页，按页拆分
   let remainingHeight = imgHeight;
   let sourceY = 0;
 
@@ -297,10 +279,7 @@ async function addImageToPdf(
       continue;
     }
 
-    // 计算源图裁剪比例
     const clipRatio = drawHeight / imgHeight;
-
-    // 创建临时 canvas 裁剪
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = Math.round(h * clipRatio);
