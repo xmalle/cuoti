@@ -34,6 +34,7 @@ export default function ExportPage() {
   const [previewing, setPreviewing] = useState(false);
   const [statusText, setStatusText] = useState('');
   const [imageMaxHeight, setImageMaxHeight] = useState(110);
+  const [imageScale, setImageScale] = useState(85);
   const [questionGap, setQuestionGap] = useState(30);
 
   const handlePreview = useCallback(async () => {
@@ -61,6 +62,7 @@ export default function ExportPage() {
         groupByChapter: filters.group_by_chapter,
         includeAnalysis: filters.include_analysis,
         maxImageHeight: imageMaxHeight,
+        imageScale: imageScale / 100,
         questionGap: questionGap,
         onStatus: (msg) => setStatusText(msg),
       });
@@ -71,7 +73,7 @@ export default function ExportPage() {
       setGenerating(false);
       setStatusText('');
     }
-  }, [filters, imageMaxHeight, questionGap]);
+  }, [filters, imageMaxHeight, imageScale, questionGap]);
 
   return (
     <div className="px-4 pt-5 pb-4">
@@ -82,6 +84,26 @@ export default function ExportPage() {
       {/* 页面布局选项 */}
       <div className="mt-3 bg-card rounded-card shadow-card p-4 flex flex-col gap-5">
         <h3 className="text-sm font-medium text-ink">页面布局</h3>
+
+        <div>
+          <div className="flex items-center justify-between text-sm text-ink-soft mb-2">
+            <span>题目图片缩放</span>
+            <span className="text-math-accent font-medium">{imageScale}%</span>
+          </div>
+          <input
+            type="range"
+            min={50}
+            max={100}
+            step={5}
+            value={imageScale}
+            onChange={(e) => setImageScale(Number(e.target.value))}
+            className="w-full accent-math-accent"
+          />
+          <div className="flex justify-between text-xs text-ink-muted mt-1">
+            <span>小 50%</span>
+            <span>大 100%</span>
+          </div>
+        </div>
 
         <div>
           <div className="flex items-center justify-between text-sm text-ink-soft mb-2">

@@ -7,6 +7,7 @@ interface ExportOptions {
   groupByChapter: boolean;
   includeAnalysis: boolean;
   maxImageHeight?: number;
+  imageScale?: number;
   questionGap?: number;
   onProgress?: (done: number, total: number) => void;
   onStatus?: (msg: string) => void;
@@ -22,6 +23,7 @@ const marginTop = 15;
 const marginBottom = 15;
 const contentWidth = pageWidth - marginX * 2;
 const defaultMaxImageHeight = 110; // 默认单张图片最大高度
+const defaultImageScale = 0.85; // 默认图片缩放比例
 const imageBottomGap = 6; // 图片与下方内容间距
 const defaultQuestionGap = 30; // 默认题目之间留白
 
@@ -131,6 +133,7 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
     onProgress,
     onStatus,
     maxImageHeight = defaultMaxImageHeight,
+    imageScale = defaultImageScale,
     questionGap = defaultQuestionGap,
   } = options;
 
@@ -158,7 +161,8 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
         yPos = marginTop;
       }
 
-      yPos = await renderQuestion(pdf, q, questionIndex, marginX, yPos, contentWidth, maxImageHeight);
+      const imageWidth = contentWidth * imageScale;
+      yPos = await renderQuestion(pdf, q, questionIndex, marginX, yPos, imageWidth, maxImageHeight);
       yPos += questionGap;
     }
   }
