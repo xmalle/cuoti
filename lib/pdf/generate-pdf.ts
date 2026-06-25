@@ -122,7 +122,7 @@ function addTextImage(
   return heightMm;
 }
 
-// 生成 PDF（双栏布局：一页两题）
+// 生成 PDF（上下布局：一页尽量放两题）
 export async function generatePdf(questions: Question[], options: ExportOptions): Promise<void> {
   const { groupByChapter, onProgress, onStatus } = options;
 
@@ -138,31 +138,21 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
       await renderChapterTitle(pdf, group.name, group.items.length);
     }
 
-    let leftY = marginTop;
-    let rightY = marginTop;
+    let yPos = marginTop;
 
     for (const q of group.items) {
       questionIndex++;
       onStatus?.(`正在生成 PDF（${questionIndex}/${totalQuestions}）`);
       onProgress?.(questionIndex - 1, totalQuestions);
 
-      // 优先放到 y 较小的那一栏
-      if (leftY <= rightY) {
-        // 左栏
-        if (leftY + 40 > pageHeight - marginBottom) {
-          leftY = marginTop;
-        }
-        const endY = await renderQuestion(pdf, q, questionIndex, marginX, leftY, colWidth);
-        leftY = endY + questionGap;
-      } else {
-        // 右栏
-        if (rightY + 40 > pageHeight - marginBottom) {
-          rightY = marginTop;
-        }
-        const x = marginX + colWidth + colGap;
-        const endY = await renderQuestion(pdf, q, questionIndex, x, rightY, colWidth);
-        rightY = endY + questionGap;
+      // 每道题固定预留约半页高度，放不下则换页
+      if (yPos > marginTop && yPos + 120 > pageHeight - marginBottom) {
+        pdf.addPage();
+        yPos = marginTop;
       }
+
+      const endY = await renderQuestion(pdf, q, questionIndex, marginX, yPos, contentWidth);
+      yPos = endY + questionGap;
     }
   }
 
