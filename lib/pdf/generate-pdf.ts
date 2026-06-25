@@ -21,6 +21,7 @@ const marginBottom = 15;
 const contentWidth = pageWidth - marginX * 2;
 const maxImageHeight = 130; // 单张图片最大高度
 const imageBottomGap = 6; // 图片与下方内容间距
+const questionGap = 25; // 题目之间留白，方便手写
 
 // 将图片 URL 转为 base64 data URL（解决 iOS Safari 跨域问题）
 async function imageUrlToBase64(url: string): Promise<string> {
@@ -150,6 +151,7 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
       }
 
       yPos = await renderQuestion(pdf, q, questionIndex, marginX, yPos, contentWidth);
+      yPos += questionGap;
     }
   }
 
@@ -233,7 +235,7 @@ async function renderQuestion(
     yPos += Math.max(tagH, 3) + 2;
   }
 
-  return yPos + 4;
+  return yPos;
 }
 
 // 将图片添加到 PDF，自动分页与尺寸限制
