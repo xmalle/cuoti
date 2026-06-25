@@ -41,7 +41,7 @@ export async function createImageRecords(
   if (storagePaths.length === 0) return [];
   const records = storagePaths.map((path, index) => ({
     question_id: questionId,
-    type,
+    type: type.toLowerCase(),
     storage_path: path,
     sort_order: index,
   }));
