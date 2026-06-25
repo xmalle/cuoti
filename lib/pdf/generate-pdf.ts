@@ -15,13 +15,12 @@ const FONT_STACK = 'system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB",
 
 const pageWidth = 210;
 const pageHeight = 297;
-const marginX = 12;
-const marginTop = 14;
-const marginBottom = 14;
+const marginX = 15;
+const marginTop = 15;
+const marginBottom = 15;
 const contentWidth = pageWidth - marginX * 2;
-const colGap = 10;
-const colWidth = (contentWidth - colGap) / 2;
-const questionGap = 30; // 题目之间留白，方便手写
+const maxImageHeight = 130; // 单张图片最大高度
+const imageBottomGap = 6; // 图片与下方内容间距
 
 // 将图片 URL 转为 base64 data URL（解决 iOS Safari 跨域问题）
 async function imageUrlToBase64(url: string): Promise<string> {
@@ -122,7 +121,7 @@ function addTextImage(
   return heightMm;
 }
 
-// 生成 PDF（上下布局：一页两题，平分页面）
+// 生成 PDF（单题流式布局，控制图片尺寸）
 export async function generatePdf(questions: Question[], options: ExportOptions): Promise<void> {
   const { groupByChapter, onProgress, onStatus } = options;
 
@@ -133,31 +132,24 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
   const totalQuestions = questions.length;
 
   for (const group of groups) {
-    // 章节标题独占一行，返回内容起始 y
-    let contentTop = marginTop;
+    let yPos = marginTop;
+
     if (groupByChapter && group.name) {
-      contentTop = await renderChapterTitle(pdf, group.name, group.items.length);
+      yPos = await renderChapterTitle(pdf, group.name, group.items.length, yPos);
     }
-
-    const availableHeight = pageHeight - marginBottom - contentTop;
-    const halfPage = availableHeight / 2;
-    const maxImageHeight = halfPage - 38; // 标题、星级、标签、留白
-
-    let slot = 0; // 0 = 上半页，1 = 下半页
 
     for (const q of group.items) {
       questionIndex++;
       onStatus?.(`正在生成 PDF（${questionIndex}/${totalQuestions}）`);
       onProgress?.(questionIndex - 1, totalQuestions);
 
-      if (slot === 0 && questionIndex > 1) {
+      // 如果剩余空间不足以容纳一个最小题目块，换页
+      if (yPos > marginTop && pageHeight - marginBottom - yPos < 40) {
         pdf.addPage();
+        yPos = marginTop;
       }
 
-      const y = contentTop + slot * halfPage;
-      await renderQuestion(pdf, q, questionIndex, marginX, y, contentWidth, maxImageHeight);
-
-      slot = slot === 0 ? 1 : 0;
+      yPos = await renderQuestion(pdf, q, questionIndex, marginX, yPos, contentWidth);
     }
   }
 
@@ -168,18 +160,26 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
   onStatus?.('');
 }
 
-// 渲染章节标题，返回内容区域起始 y
-async function renderChapterTitle(pdf: jsPDF, name: string, count: number): Promise<number> {
+// 渲染章节标题，返回新的 y 坐标
+async function renderChapterTitle(
+  pdf: jsPDF,
+  name: string,
+  count: number,
+  yPos: number
+): Promise<number> {
   const titleHeight = 18;
-  const titleGap = 6;
+  if (yPos + titleHeight > pageHeight - marginBottom) {
+    pdf.addPage();
+    yPos = marginTop;
+  }
   pdf.setFillColor(0xf5, 0xf4, 0xee);
-  pdf.rect(marginX, marginTop, contentWidth, titleHeight, 'F');
+  pdf.rect(marginX, yPos, contentWidth, titleHeight, 'F');
   pdf.setDrawColor(0xb8, 0x47, 0x2f);
   pdf.setLineWidth(0.8);
-  pdf.line(marginX, marginTop, marginX, marginTop + titleHeight);
-  addTextImage(pdf, name, marginX + 5, marginTop + 2, 14, [0x2b, 0x2a, 0x28], contentWidth - 5, 'bold');
-  addTextImage(pdf, `${count} 题`, marginX + 5, marginTop + 11, 9, [0x8a, 0x87, 0x80], contentWidth - 5);
-  return marginTop + titleHeight + titleGap;
+  pdf.line(marginX, yPos, marginX, yPos + titleHeight);
+  addTextImage(pdf, name, marginX + 5, yPos + 2, 14, [0x2b, 0x2a, 0x28], contentWidth - 5, 'bold');
+  addTextImage(pdf, `${count} 题`, marginX + 5, yPos + 11, 9, [0x8a, 0x87, 0x80], contentWidth - 5);
+  return yPos + titleHeight + 8;
 }
 
 // 渲染单道题目，返回结束 y 坐标
@@ -189,8 +189,7 @@ async function renderQuestion(
   index: number,
   x: number,
   y: number,
-  width: number,
-  maxImageHeight: number
+  width: number
 ): Promise<number> {
   let yPos = y;
 
@@ -214,17 +213,17 @@ async function renderQuestion(
     const urls = questionImages.map((img) => getPublicImageUrl(img.storage_path));
     try {
       const stitchedBase64 = await stitchImageUrls(urls, 'vertical', 0);
-      yPos = await addImageToPdf(pdf, stitchedBase64, x, yPos, width, maxImageHeight);
+      yPos = await addImageToPdf(pdf, stitchedBase64, x, yPos, width);
     } catch {
       for (const imgData of questionImages) {
         const url = getPublicImageUrl(imgData.storage_path);
-        yPos = await addImageToPdf(pdf, url, x, yPos, width, maxImageHeight);
+        yPos = await addImageToPdf(pdf, url, x, yPos, width);
       }
     }
   } else {
     for (const imgData of questionImages) {
       const url = getPublicImageUrl(imgData.storage_path);
-      yPos = await addImageToPdf(pdf, url, x, yPos, width, maxImageHeight);
+      yPos = await addImageToPdf(pdf, url, x, yPos, width);
     }
   }
 
@@ -234,17 +233,16 @@ async function renderQuestion(
     yPos += Math.max(tagH, 3) + 2;
   }
 
-  return yPos;
+  return yPos + 4;
 }
 
-// 将图片添加到 PDF，自动分页
+// 将图片添加到 PDF，自动分页与尺寸限制
 async function addImageToPdf(
   pdf: jsPDF,
   url: string,
   x: number,
   yPos: number,
-  imgWidth: number,
-  maxHeight: number = Infinity
+  imgWidth: number
 ): Promise<number> {
   const base64 = await imageUrlToBase64(url);
   const { img, w, h } = await loadImage(base64);
@@ -252,10 +250,16 @@ async function addImageToPdf(
   const ratio = h / w;
   let imgHeight = imgWidth * ratio;
 
-  // 如果图片高度超过限制，等比例缩小
-  if (imgHeight > maxHeight) {
-    imgHeight = maxHeight;
+  // 高度超过 130mm 时等比例缩小
+  if (imgHeight > maxImageHeight) {
+    imgHeight = maxImageHeight;
     imgWidth = imgHeight / ratio;
+  }
+
+  // 剩余空间不足则换页
+  if (yPos + imgHeight + 10 > pageHeight - marginBottom) {
+    pdf.addPage();
+    yPos = marginTop;
   }
 
   let remainingHeight = imgHeight;
@@ -292,7 +296,7 @@ async function addImageToPdf(
     }
   }
 
-  return yPos + 2;
+  return yPos + imageBottomGap;
 }
 
 function groupByChapterFn(questions: Question[]) {
