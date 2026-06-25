@@ -239,19 +239,6 @@ export async function generatePdf(questions: Question[], options: ExportOptions)
               yPos = await addImageToPdf(pdf, url, marginX, yPos, contentWidth, pageHeight, marginTop, marginBottom);
             }
           }
-
-          if (q.analysis_supplement) {
-            const textLines = renderTextLines(q.analysis_supplement, 9, [0x5c, 0x5a, 0x55], contentWidth);
-            for (const line of textLines) {
-              if (yPos + line.heightMm > pageHeight - marginBottom) {
-                pdf.addPage();
-                yPos = marginTop;
-              }
-              pdf.addImage(line.dataUrl, 'PNG', marginX, yPos, contentWidth, line.heightMm);
-              yPos += line.heightMm;
-            }
-            yPos += 2;
-          }
         }
       }
 
