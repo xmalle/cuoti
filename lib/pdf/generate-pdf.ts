@@ -115,7 +115,7 @@ function addTextImage(
   return heightMm;
 }
 
-// 生成 PDF（中文 Canvas 渲染 + 图片 addImage 方案）
+// 生成 PDF（中文 Canvas 渲染 + 图片 addImage 方案）v20250624
 export async function generatePdf(questions: Question[], options: ExportOptions): Promise<void> {
   const { groupByChapter, includeAnalysis, onProgress, onStatus } = options;
 
