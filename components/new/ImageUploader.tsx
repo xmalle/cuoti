@@ -12,7 +12,7 @@ interface ImageUploaderProps {
   required?: boolean;
   max?: number;
   files: File[];
-  onChange: (files: File[]) => void;
+  onChange: (files: File[] | ((prev: File[]) => File[])) => void;
   existingUrls?: string[];
 }
 
@@ -40,17 +40,9 @@ export function ImageUploader({
   const [stitching, setStitching] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
 
-  // 生成本地预览
-  const generatePreviews = (newFiles: File[]) => {
-    const existing = [...previewUrls];
-    for (const f of newFiles) {
-      existing.push(URL.createObjectURL(f));
-    }
-    setPreviewUrls(existing);
-  };
-
   const handleSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files || []);
+    e.target.value = '';
     if (selected.length === 0) return;
 
     const remaining = max - files.length;
@@ -60,22 +52,22 @@ export function ImageUploader({
     setCompressing(true);
     try {
       const compressed = await compressImages(toAdd, 1200);
-      const newFiles = [...files, ...compressed];
-      onChange(newFiles);
-      generatePreviews(compressed);
+      onChange((prev) => {
+        const combined = [...prev, ...compressed];
+        return combined.slice(0, max);
+      });
+      const objectUrls = compressed.map((f) => URL.createObjectURL(f));
+      setPreviewUrls((prev) => [...prev, ...objectUrls]);
     } catch (err) {
       console.error(err);
     } finally {
       setCompressing(false);
-      if (inputRef.current) inputRef.current.value = '';
     }
   };
 
   const removeFile = (index: number) => {
-    const newFiles = files.filter((_, i) => i !== index);
-    const newPreviews = previewUrls.filter((_, i) => i !== index);
-    onChange(newFiles);
-    setPreviewUrls(newPreviews);
+    onChange((prev) => prev.filter((_, i) => i !== index));
+    setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
   const total = existingUrls.length + files.length;
